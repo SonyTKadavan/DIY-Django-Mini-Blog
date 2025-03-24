@@ -1,0 +1,188 @@
+{% extends "base.html" %}
+{% load blog_extras %}
+
+{% block title %}{{ blogpost.title }}{% endblock %}
+
+{% block content %}
+<article class="blog-post">
+    <h1 class="mb-4">{{ blogpost.title }}</h1>
+    <div class="d-flex align-items-center mb-4">
+        <div class="author-info">
+            <i class="bi bi-person-circle"></i>
+            <a href="{% url 'blogger-detail' blogpost.author.pk %}" class="text-decoration-none">{{ blogpost.author }}</a>
+        </div>
+        <div class="date-info ms-4">
+            <i class="bi bi-calendar"></i>
+            {{ blogpost.post_date|date }}
+        </div>
+    </div>
+
+    {% if blogpost.tags.all %}
+    <div class="tags mb-4">
+        <i class="bi bi-tags"></i>
+        {% for tag in blogpost.tags.all %}
+        <a href="{% url 'tag-posts' tag.slug %}" class="badge bg-secondary text-decoration-none me-1">
+            {{ tag.name }}
+        </a>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if user.is_authenticated and user == blogpost.author.user %}
+    <div class="action-buttons mb-4">
+        <a href="{% url 'post-update' blogpost.pk %}" class="btn btn-primary">
+            <i class="bi bi-pencil"></i> Edit Post
+        </a>
+        <a href="{% url 'post-delete' blogpost.pk %}" class="btn btn-danger">
+            <i class="bi bi-trash"></i> Delete Post
+        </a>
+    </div>
+    {% endif %}
+
+    {% if messages %}
+    <div class="messages mb-4">
+        {% for message in messages %}
+        <div class="alert {% if message.tags == 'error' %}alert-danger{% else %}alert-{{ message.tags }}{% endif %} alert-dismissible fade show" role="alert">
+            {{ message }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div class="blog-content mb-5">
+        {{ blogpost.content|linebreaks }}
+    </div>
+
+    <!-- Reactions Section -->
+    <div class="reactions mb-4">
+        {% csrf_token %}
+        <h5 class="mb-3"><i class="bi bi-emoji-smile"></i> Reactions</h5>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            {% for reaction_type, label in blogpost.reaction_choices %}
+            <button class="btn {% if user_reaction and user_reaction.reaction_type == reaction_type %}btn-primary{% else %}btn-outline-primary{% endif %} reaction-btn"
+                    data-reaction="{{ reaction_type }}"
+                    {% if not user.is_authenticated %}disabled title="Please login to react"{% endif %}>
+                <span class="reaction-emoji">{{ label|slice:":2" }}</span>
+                <span class="reaction-label">{{ label|slice:"2:" }}</span>
+                <span class="reaction-count badge bg-secondary ms-1">{{ blogpost.get_reaction_counts|get_item:reaction_type|default:"0" }}</span>
+            </button>
+            {% endfor %}
+        </div>
+        {% if not user.is_authenticated %}
+        <div class="mt-2 text-muted">
+            <small><a href="{% url 'login' %}">Login</a> to react to this post</small>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Comments Section -->
+    <section class="comments-section mt-5">
+        <h2 class="mb-4"><i class="bi bi-chat-dots"></i> Comments</h2>
+        
+        {% if user.is_authenticated %}
+        <div class="card mb-4">
+            <div class="card-body">
+                <form method="post" action="{% url 'blog-comment' blogpost.pk %}">
+                    {% csrf_token %}
+                    <div class="mb-3">
+                        <label for="comment" class="form-label">Add a comment</label>
+                        <textarea class="form-control" id="comment" name="description" rows="3" required></textarea>
+                    </div>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-send"></i> Post Comment
+                    </button>
+                </form>
+            </div>
+        </div>
+        {% else %}
+        <div class="alert alert-info mb-4">
+            <i class="bi bi-info-circle"></i> Please <a href="{% url 'login' %}?next={{ request.path }}">login</a> to comment.
+        </div>
+        {% endif %}
+
+        {% if blogpost.comment_set.all %}
+        <div class="comments-list">
+            {% for comment in blogpost.comment_set.all %}
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="d-flex justify-content-between align-items-start mb-2">
+                        <div>
+                            <strong><i class="bi bi-person-circle"></i> {{ comment.user.username }}</strong>
+                            <small class="text-muted ms-2">
+                                <i class="bi bi-clock"></i> {{ comment.post_date|timesince }} ago
+                            </small>
+                        </div>
+                    </div>
+                    <p class="card-text">{{ comment.description|linebreaks }}</p>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        {% else %}
+        <div class="alert alert-info">
+            <i class="bi bi-info-circle"></i> No comments yet. Be the first to comment!
+        </div>
+        {% endif %}
+    </section>
+</article>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const csrfToken = document.querySelector('[name=csrfmiddlewaretoken]').value;
+    
+    document.querySelectorAll('.reaction-btn').forEach(button => {
+        button.addEventListener('click', async function() {
+            if (!this.disabled) {
+                const reactionType = this.dataset.reaction;
+                const postId = '{{ blogpost.pk }}';
+                
+                try {
+                    const response = await fetch(`/post/${postId}/react/`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                            'X-CSRFToken': csrfToken
+                        },
+                        body: JSON.stringify({
+                            reaction_type: reactionType
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    
+                    if (data.status === 'success') {
+                        // Update reaction counts
+                        document.querySelectorAll('.reaction-btn').forEach(btn => {
+                            const type = btn.dataset.reaction;
+                            const countSpan = btn.querySelector('.reaction-count');
+                            countSpan.textContent = data.reaction_counts[type] || '0';
+                            
+                            // Update button state
+                            if (type === data.user_reaction) {
+                                btn.classList.remove('btn-outline-primary');
+                                btn.classList.add('btn-primary');
+                            } else {
+                                btn.classList.remove('btn-primary');
+                                btn.classList.add('btn-outline-primary');
+                            }
+                        });
+                    } else {
+                        console.error('Error:', data.message);
+                    }
+                } catch (error) {
+                    console.error('Error:', error);
+                }
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

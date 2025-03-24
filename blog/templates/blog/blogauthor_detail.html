@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+
+{% block title %}Blogger: {{ blogauthor.user.username }}{% endblock %}
+
+{% block content %}
+<div class="author-profile mb-5">
+    <div class="d-flex align-items-center mb-4">
+        <h1><i class="bi bi-person-circle"></i> {{ blogauthor.user.username }}</h1>
+        {% if user.is_authenticated and user == blogauthor.user %}
+        <a href="{% url 'admin:blog_blogauthor_change' blogauthor.pk %}" class="btn btn-outline-primary ms-3">
+            <i class="bi bi-pencil"></i> Edit Profile
+        </a>
+        {% endif %}
+    </div>
+
+    <div class="card mb-4">
+        <div class="card-body">
+            <h2 class="card-title h4"><i class="bi bi-file-person"></i> Bio</h2>
+            <div class="bio-content">
+                {{ blogauthor.bio|linebreaks }}
+            </div>
+            <p class="text-muted mt-3 mb-0">
+                <i class="bi bi-journal-text"></i> {{ blogauthor.blogpost_set.count }} posts published
+            </p>
+        </div>
+    </div>
+</div>
+
+<div class="author-posts">
+    <h2 class="mb-4"><i class="bi bi-journals"></i> Blog Posts</h2>
+    {% if blogauthor.blogpost_set.all %}
+    <div class="row">
+        {% for post in blogauthor.blogpost_set.all %}
+        <div class="col-md-12 mb-3">
+            <div class="card">
+                <div class="card-body">
+                    <h3 class="h5">
+                        <a href="{% url 'post-detail' post.pk %}" class="text-decoration-none">{{ post.title }}</a>
+                    </h3>
+                    <p class="text-muted">
+                        <i class="bi bi-calendar"></i> {{ post.post_date|date }}
+                        <span class="ms-3">
+                            <i class="bi bi-chat-dots"></i> {{ post.comment_set.count }} comments
+                        </span>
+                    </p>
+                    <p class="card-text">{{ post.content|truncatewords:50 }}</p>
+                    <a href="{% url 'post-detail' post.pk %}" class="btn btn-outline-primary btn-sm">
+                        <i class="bi bi-book"></i> Read More
+                    </a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="alert alert-info">
+        <i class="bi bi-info-circle"></i> This blogger has not posted any blogs yet.
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
